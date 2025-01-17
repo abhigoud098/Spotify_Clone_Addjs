@@ -105,17 +105,22 @@ body {
   max-height: 60vh;
 }
 
+.cardContainer ul{
+  display: flex;
+  list-style-type: none;
+}
+
 #artistName {
   position: relative;
   height: 3rem;
 }
 
 .card {
-  width: 152px;
+  width: 250px;
   padding: 10px;
   border-radius: 5px;
   right: 7.5rem;
-  transition: all 0.7s;
+  transition: all 0.7s; 
 }
 
 .card:hover {
@@ -213,7 +218,7 @@ body {
   align-items: center;
   position: fixed;
   bottom: 30px;
-  background: #e2d9d9;
+  background: #000000;
   border-radius: 10px;
   width: 70%;
   padding: 12px;
@@ -241,6 +246,10 @@ body {
   display: flex;
   justify-content: center;
   gap: 16px;
+}
+
+.songbuttons img{
+ background: white;
 }
 
 .timevol {
@@ -509,3 +518,4 @@ body {
     height: 300px;
   }
 }
+

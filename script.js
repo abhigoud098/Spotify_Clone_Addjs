@@ -3,6 +3,7 @@ console.log("Lets write JavaScript");
 let currentSong = new Audio();
 let songs;
 let currFolder;
+let previousVolume = 0.1; // Initialize with default volume
 
 function secondsToMinutesSeconds(seconds) {
   if (isNaN(seconds) || seconds < 0) {
@@ -20,7 +21,7 @@ function secondsToMinutesSeconds(seconds) {
 
 async function getSongs(folder) {
   currFolder = folder;
-  let a = await fetch(`http://127.0.0.1:5500/${folder}/`); 
+  let a = await fetch(`http://127.0.0.1:5500/${folder}/`);
   let response = await a.text();
   let div = document.createElement("div");
   div.innerHTML = response;
@@ -36,7 +37,7 @@ async function getSongs(folder) {
 }
 
 const playMusic = (track, pause = false) => {
-  currentSong.src = "/${currFolder}/" + track;
+  currentSong.src = `/${currFolder}/` + track;
   if (!pause) {
     currentSong.play();
     play.src = "SVG/pause.svg";
@@ -45,9 +46,10 @@ const playMusic = (track, pause = false) => {
   document.querySelector(".songtime").innerHTML = "00:00 / 00:00";
 };
 
-async function main() {
-  songs = await getSongs("songs/ncs");
-  playMusic(songs[0], true);
+async function loadArtistSongs(artistId) {
+  // songs = await loadPlaylistByArtist('3cEYpjA9oz9GiPac4AsH4n', 5);
+  songs = await loadAlbumByArtist(artistId, 5); // KK
+  // playMusic(songs[0], true);
 
   // Show all the songs in the playlist
   let songUL = document
@@ -55,17 +57,18 @@ async function main() {
     .getElementsByTagName("ul")[0];
   songUL.innerHTML = "";
   for (const song of songs) {
-    songUL.innerHTML =
-      songUL.innerHTML +
-      `<li><img class="invert" width="34" src="SVG/music.svg" alt="">
-                             <div class="info">
-                                 <div> ${song.replaceAll("%20", " ")}</div>
-                                 <div>Harry</div>
-                             </div>
-                             <div class="playnow">
-                                 <span>Play Now</span>
-                                 <img class="invert" src="SVG/play.svg" alt="">
-                             </div> </li>`;
+    songUL.innerHTML += `
+      <li>
+        <img class="invert" width="34" src="SVG/music.svg" alt="">
+        <div class="info">
+          <div>${song.track.album.name}</div>
+          <div>${song.track.album.artists.map((a) => a.name).join(", ")}</div>
+        </div>
+        <div class="playnow">
+          <span>Play Now</span>
+          <img class="invert" src="SVG/play.svg" alt="">
+        </div>
+      </li>`;
   }
 
   // Attach an event listener to each song
@@ -73,8 +76,13 @@ async function main() {
     document.querySelector(".songList").getElementsByTagName("li")
   ).forEach((e) => {
     e.addEventListener("click", (element) => {
-      // console.log(e.querySelector(".info").firstElementChild.innerHTML.trim())
-      playMusic(e.querySelector(".info").firstElementChild.innerHTML.trim());
+      playMusic(
+        songs[
+          songs.indexOf(
+            e.querySelector(".info").firstElementChild.innerHTML.trim()
+          )
+        ]
+      );
     });
   });
 
@@ -118,21 +126,22 @@ async function main() {
   // Add an event listener to previous
   previous.addEventListener("click", () => {
     currentSong.pause();
-    console.log("Previous clicked");
     let index = songs.indexOf(currentSong.src.split("/").slice(-1)[0]);
-    if (index - 1 >= 0) {
+    if (index > 0) {
       playMusic(songs[index - 1]);
+    } else {
+      playMusic(songs[songs.length - 1]); // loop to last song
     }
   });
 
   // Add an event listener to next
   next.addEventListener("click", () => {
     currentSong.pause();
-    console.log("Next clicked");
-
     let index = songs.indexOf(currentSong.src.split("/").slice(-1)[0]);
-    if (index + 1 < songs.length) {
+    if (index < songs.length - 1) {
       playMusic(songs[index + 1]);
+    } else {
+      playMusic(songs[0]); // loop to first song
     }
   });
 
@@ -141,13 +150,8 @@ async function main() {
     .querySelector(".range")
     .getElementsByTagName("input")[0]
     .addEventListener("change", (e) => {
-      console.log("Setting volume to", e.target.value, "/ 100");
-      currentSong.volume = parseInt(e.target.value) / 100;
-      if (currentSong.volume > 0) {
-        document.querySelector(".volume>img").src = document
-          .querySelector(".volume>img")
-          .src.replace("mute.svg", "volume.svg");
-      }
+      previousVolume = parseInt(e.target.value) / 100; // track new volume
+      currentSong.volume = previousVolume;
     });
 
   // Add event listener to mute the track
@@ -160,15 +164,104 @@ async function main() {
         .getElementsByTagName("input")[0].value = 0;
     } else {
       e.target.src = e.target.src.replace("mute.svg", "volume.svg");
-      currentSong.volume = 0.1;
-      document
-        .querySelector(".range")
-        .getElementsByTagName("input")[0].value = 10;
+      currentSong.volume = previousVolume; // Reset to previous volume
+      document.querySelector(".range").getElementsByTagName("input")[0].value =
+        previousVolume * 100;
     }
   });
-
-
-
 }
 
-main();
+var token;
+
+async function fetchToken() {
+  let tokenRes = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: "fd81f9f4e07a41b0923f29af31bc5759",
+      client_secret: "fe30b5276884499799de5d495573a435",
+    }),
+  });
+
+  token = (await tokenRes.json()).access_token;
+
+  loadArtistsDetails();
+}
+
+async function loadAlbumByArtist(artistId) {
+  let playlist = await fetch(
+    `https://api.spotify.com/v1/artists/${artistId}/albums?market=IN`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    }
+  );
+
+  return (await playlist.json()).items;
+}
+
+async function loadPlaylistByArtist(artistId, items) {
+  let playlist = await fetch(
+    `https://api.spotify.com/v1/playlists/${artistId}/tracks?limit=${items}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    }
+  );
+
+  return (await playlist.json()).items;
+}
+
+async function getArtistsList() {
+  const artists = [
+    "2CIMQHirSU0MQqyYHq0eOx",
+    "57dN52uHvrHOxijzpIgu3E",
+    "1vCWHaC5f2uS3yhpwWbIA6",
+  ];
+
+  let artistsResponse = await fetch(
+    `https://api.spotify.com/v1/artists?ids=${artists.join()}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  artistsResponse = await artistsResponse.json();
+  return artistsResponse.artists;
+}
+
+async function loadArtistsDetails() {
+  const artists = await getArtistsList();
+  let artistList = document.createElement("ul");
+  let artistTemplate = document.getElementById("artist-template");
+  for (let index = 0; index < artists.length; index++) {
+    const artist = artists[index];
+    const artistNode = artistTemplate.content.cloneNode(true);
+    const artistCard = artistNode.getElementById('artist-card');
+    artistCard.addEventListener("click", () => {
+      loadArtistSongs(artist.id);
+    });
+
+    const artistImg = artistNode.getElementById("artist-image");
+    artistImg.setAttribute("src", artist.images[0].url);
+    artistImg.setAttribute("alt", "artist thumbnail");
+
+    const artistName = artistNode.getElementById("artist-name");
+    artistName.innerHTML = artist.name;
+
+    artistList.appendChild(artistNode);
+  }
+
+  artistListContainer = document.getElementById("artist-card-container");
+  artistListContainer.innerHTML = "";
+  artistListContainer.appendChild(artistList);
+}
+
+fetchToken();
